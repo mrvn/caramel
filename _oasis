@@ -1,0 +1,77 @@
+OASISFormat:  0.4
+Name:         comp
+Version:      0.0.0
+#LicenseFile:  ?
+License:      GPL-3+ with OCaml linking exception
+Authors:      Goswin von Brederlow <goswin-v-b@web.de>
+Copyrights:
+              (C) 2014 Goswin von Brederlow
+#Homepage:     http://???/
+BuildTools:   ocamlbuild
+Plugins:      DevFiles (0.3), META (0.3)
+
+Synopsis: Compiler for a ocaml like language.
+Description:
+  Compiler for a ocaml like language.
+
+OCamlVersion: >= 4.01
+
+Flag strict
+  Description: Strict compile-time checks
+  Default: true
+
+Library eq
+  Path: eq
+  Pack: false
+  Modules: src/Eq
+  Install: false
+  CompiledObject: best
+
+Library univ
+  Path: univ
+  Pack: true
+  InternalModules: src/Witnessed
+  Install: false
+  CompiledObject: best
+  BuildDepends: eq
+
+Library lexer
+  Path: lexer
+  Pack: false
+  Modules: src/Lexer
+  Install: false
+  CompiledObject: best
+  BuildDepends: univ
+
+Library parser
+  Path: parser
+  Pack: false
+  Modules: src/Types, src/Parser
+  Install: false
+  CompiledObject: best
+  BuildDepends: eq
+
+Library regexp
+  Path: regexp
+  Pack: false
+  Modules: src/Regexp
+  Install: false
+  CompiledObject: best
+  BuildDepends: parser
+
+Executable comp
+  Path: src
+  Install: true
+  CompiledObject: best
+  MainIs: comp.ml
+  BuildDepends: eq, univ, lexer, parser
+
+Test main
+  Command: test/test.sh
+  TestTools: test
+
+#SourceRepository master
+#  Type: git
+#  Location: https://github.com/Drup/LILiS.git
+#  Branch: master
+#  Browser: https://github.com/Drup/LILiS
