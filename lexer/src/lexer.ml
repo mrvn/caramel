@@ -15,15 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
-module type Lexeme = sig
-  type 'a token
-  type 'a attrib
-  val string_of_token : 'a token -> string
-  val string_of_attrib : 'a attrib -> string
-  val value_of_attrib : 'a attrib -> 'a
-end
-
-module type Lexer = sig
+module type Rules = sig
+  (* from LexerTypes *)
   type 'a token
   type 'a attrib
   val string_of_token : 'a token -> string
@@ -34,41 +27,91 @@ module type Lexer = sig
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   val has_token : 'a token -> lexeme -> bool
   val string_of_lexeme : lexeme -> string
-  val string_of_lexemes : lexeme list -> string
+  val string_of_lexemes : lexeme Input.t -> string
+
+  (* new stuff *)
+  type symbol
+  type action =
+    Pos.t * symbol list * symbol Input.t
+    -> Pos.t * lexeme * symbol Input.t
+  type rule = symbol Regexp.regexp * action
+  type scan_one = symbol Input.t -> Pos.t * lexeme * symbol Input.t
+  val specs : scan_one -> rule list
 end
 
-module MAKE(L : Lexeme) : Lexer with type 'a token = 'a L.token
-				and type 'a attrib = 'a L.attrib = struct
-  type 'a token = 'a L.token
-  type 'a attrib = 'a L.attrib
-  let string_of_token = L.string_of_token
-  let string_of_attrib = L.string_of_attrib
-  let value_of_attrib = L.value_of_attrib
-  module W = struct
-    type 'a key = 'a token
-    type 'a value = 'a attrib
-    let string_of_key = string_of_token
-    let string_of_value = string_of_attrib
+module MAKE(R : Rules) (* : (Lexer with ...) *) = struct
+  include R
+
+  module State = struct
+    type t = R.rule list
+
+    let filter pred l =
+      let rec f l r =
+        match l with
+            [] -> List.rev r
+          | x::xs ->
+	    if pred x 
+	    then f xs (x::r)
+	    else f xs r
+      in f l []
+
+    let next state symbol =
+      let after_state =
+        List.map (function (regexp, action) ->
+          Regexp.after_symbol symbol regexp, action)
+          state
+      in
+      filter (function (regexp, _) ->
+        not (Regexp.is_null regexp))
+        after_state
+
+    let initial_state scan_one = R.specs scan_one
+
+    let matched_rules state =
+      filter (function (regexp, _) ->
+        Regexp.accepts_empty regexp)
+        state
+
+    let is_stuck state = state = []
   end
-  module Boxed = Univ.Witnessed.MAKE(W)
-  type lexeme = Boxed.t
-  let lexeme token attrib = Boxed.box token attrib
-  let attrib_opt token lexeme = Boxed.value_opt token lexeme
-  let has_token token lexeme =
-    match Boxed.value_opt token lexeme with
-    | None -> false
-    | _ -> true
-  let string_of_lexeme lexeme =
-    match Boxed.as_strings lexeme with
-    | (k, "") -> k
-    | (k, v) -> Printf.sprintf "(%s %s)" k v
-  let string_of_lexemes lexemes =
-    let (_, str) =
-      List.fold_left
-        (fun (sep, str) lexeme ->
-          (" ", Printf.sprintf "%s%s%s" str sep (string_of_lexeme lexeme)))
-        ("", "")
-        lexemes
+
+  (* Longest match *)
+  exception Scan_error of Pos.t
+
+  let rec scan_one stream =
+    let start = Input.pos stream in
+    let rec loop pos state rev_lexeme maybe_last_match stream =
+      match stream with
+      | [] -> maybe_last_match
+      | _ when State.is_stuck state -> maybe_last_match
+      | (new_pos, symbol) :: stream ->
+	let new_pos = Pos.merge pos new_pos in
+        let new_state = State.next state symbol in
+        let new_matched = State.matched_rules new_state in
+        let rev_lexeme = symbol::rev_lexeme in
+        let maybe_last_match =
+          match new_matched with
+            | [] -> maybe_last_match
+            | (_, action)::_ -> Some (action, rev_lexeme, pos, stream)
+        in
+        loop new_pos new_state rev_lexeme maybe_last_match stream
     in
-    str
+    let (action, rev_lexeme, pos, stream) =
+      match loop start (State.initial_state scan_one) [] None stream with
+        | None -> raise @@ Scan_error start
+        | Some last_match -> last_match
+    in
+    let (pos, lexeme, stream) = action (pos, List.rev rev_lexeme, stream)
+    in
+    (pos, lexeme, stream)
+      
+  let scan stream =
+    let rec scan rev_result = function
+      | [] -> List.rev rev_result
+      | stream ->
+        let (pos, lexeme, stream) = scan_one stream
+        in
+        scan ((pos, lexeme) :: rev_result) stream
+    in
+    scan [] stream
 end

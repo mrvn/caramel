@@ -20,10 +20,10 @@ Flag strict
   Description: Strict compile-time checks
   Default: true
 
-Library eq
-  Path: eq
+Library common
+  Path: common
   Pack: false
-  Modules: src/Eq
+  Modules: src/Eq, src/Pos, src/Input
   Install: false
   CompiledObject: best
 
@@ -33,15 +33,7 @@ Library univ
   InternalModules: src/Witnessed
   Install: false
   CompiledObject: best
-  BuildDepends: eq
-
-Library lexer
-  Path: lexer
-  Pack: false
-  Modules: src/Lexer
-  Install: false
-  CompiledObject: best
-  BuildDepends: univ
+  BuildDepends: common
 
 Library parser
   Path: parser
@@ -49,7 +41,7 @@ Library parser
   Modules: src/Types, src/Parser
   Install: false
   CompiledObject: best
-  BuildDepends: eq
+  BuildDepends: common
 
 Library regexp
   Path: regexp
@@ -59,12 +51,20 @@ Library regexp
   CompiledObject: best
   BuildDepends: parser
 
+Library lexer
+  Path: lexer
+  Pack: false
+  Modules: src/LexerTypes, src/Lexer
+  Install: false
+  CompiledObject: best
+  BuildDepends: common, univ, regexp
+
 Executable comp
   Path: src
   Install: true
   CompiledObject: best
   MainIs: comp.ml
-  BuildDepends: eq, univ, lexer, parser
+  BuildDepends: common, univ, lexer, parser
 
 Test main
   Command: test/test.sh

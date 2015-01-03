@@ -1,3 +1,3 @@
 #!/bin/sh
 
-./comp.native
+echo "(1 + 2) \n * 3" | ./comp.native

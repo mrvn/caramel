@@ -26,7 +26,7 @@ module type Grammar = sig
   type lexeme
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   val value_of_attrib : 'a attrib -> 'a
-  val string_of_lexemes : lexeme list -> string
+  val string_of_lexemes : lexeme Input.t -> string
   type 'a symbol =
   | NT of 'a n
   | T of 'a token
@@ -93,11 +93,11 @@ module MAKE(G : Grammar) = struct
       Printf.printf "%sMatching token %s\n%!" indent (string_of_token token);
       match lexemes with
       | [] -> Printf.printf "%sout of lexemes\n%!" indent; raise ParseError
-      | hd :: tl ->
+      | (pos, lexeme) :: lexemes ->
         let value =
-          match attrib_opt token hd with
+          match attrib_opt token lexeme with
           | Some attrib -> value_of_attrib attrib
           | None -> Printf.printf "%sfailed\n%!" indent; raise ParseError
         in
-        parse (depth + 1) (Rule (P(nt, rest), A (attribution value))) tl
+        parse (depth + 1) (Rule (P(nt, rest), A (attribution value))) lexemes
 end

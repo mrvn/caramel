@@ -15,7 +15,8 @@ Progress
 
   * Regular expressions: done
   * Universal containers: Witnessed
-  * Lexer: type sceleton
+  * Lexer: done
   * Parser: simple recursive parser
-  * compiler: just parser test
+  * tokenize: begining of the language
+  * compiler: tokenize and parse from stdin
 

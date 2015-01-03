@@ -15,39 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
-module TA = struct
-  type _ token =
-  | TInt : int  token
-  | TAdd : unit token
-  | TMul : unit token
-  | TEof : unit token
-
-  let string_of_token : type a . a token -> string = function
-    | TInt -> "TInt"
-    | TAdd -> "TAdd"
-    | TMul -> "TMul"
-    | TEof -> "TEof"
-
-  type _ attrib =
-  | ANil : unit attrib
-  | AInt : int -> int attrib
-
-  let string_of_attrib : type a . a attrib -> string = function
-    | ANil -> ""
-    | AInt i -> string_of_int i
-
-  let value_of_attrib : type a . a attrib -> a = function
-    | ANil -> ()
-    | AInt i -> i
-end
-
-module Lexer' = Lexer.MAKE(TA)
-module Lexer = struct
-  include TA
-  include (Lexer' : module type of Lexer' with type 'a token := 'a TA.token
-					  and type 'a attrib := 'a TA.attrib)
-end
-
+let input = Input.from_stdin ()
+let lexemes =
+  try
+    Tokenize.scan input
+  with Tokenize.Scan_error(pos) ->
+    Printf.printf "Scan error at %s\n" (Pos.string_of_t pos);
+    exit 1
+(*  
 (* test: 3*2+1 *)
 let lexemes = Lexer.([
   lexeme TInt (AInt 3);
@@ -57,8 +32,8 @@ let lexemes = Lexer.([
   lexeme TInt (AInt 1);
   lexeme TEof ANil;
 ])
-
-let () = Printf.printf "Input = '%s'\n" (Lexer.string_of_lexemes lexemes)
+*)
+let () = Printf.printf "Input = '%s'\n" (Tokenize.string_of_lexemes lexemes)
 
 module Grammar = struct
   module Symbols = struct
@@ -76,6 +51,7 @@ module Grammar = struct
     | Start : expression n
     | AddExpr : expression n
     | MulExpr : expression n
+    | ValExpr : expression n
 
     module Assoc = Eq.MAKE(struct type 'a t = 'a n end)
     let n_equal n1 n2 = Assoc.equal n1 n2
@@ -83,15 +59,16 @@ module Grammar = struct
       | Start -> "Start"
       | AddExpr -> "AddExpr"
       | MulExpr -> "MulExpr"
+      | ValExpr -> "ValExpr"
 
-    type 'a token = 'a TA.token
-    let string_of_token = TA.string_of_token
-    type 'a attrib = 'a TA.attrib
-    let string_of_attrib = TA.string_of_attrib
-    type lexeme = Lexer.lexeme
-    let string_of_lexemes = Lexer.string_of_lexemes
-    let attrib_opt = Lexer.attrib_opt
-    let value_of_attrib = Lexer.value_of_attrib
+    type 'a token = 'a Tokenize.token
+    let string_of_token = Tokenize.string_of_token
+    type 'a attrib = 'a Tokenize.attrib
+    let string_of_attrib = Tokenize.string_of_attrib
+    type lexeme = Tokenize.lexeme
+    let string_of_lexemes = Tokenize.string_of_lexemes
+    let attrib_opt = Tokenize.attrib_opt
+    let value_of_attrib = Tokenize.value_of_attrib
   end
   open Symbols
 
@@ -102,24 +79,30 @@ module Grammar = struct
     Start   := AddExpr TEof
     AddExpr := MulExpr + AddExpr
     AddExpr := MulExpr
-    MulExpr := TInt * MulExpr
-    MulExpr := TInt
+    MulExpr := ValExpr * MulExpr
+    MulExpr := ValExpr
+    ValExpr := TInt
+    ValExpr := TLParen AddExp TRParen
   *)
-  open TA
+  open Tokenize
   let rule_start = Rule (P (Start, (NT AddExpr) ^^^ (T TEof) ^^^ ret),
                          A (fun e _ -> e))
-  let rule_add1 = Rule (P (AddExpr, (NT MulExpr) ^^^ (T TAdd) ^^^ (NT AddExpr) ^^^ ret),
+  let rule_add1 = Rule (P (AddExpr, (NT MulExpr) ^^^ (T TInfix2) ^^^ (NT AddExpr) ^^^ ret),
                         A (fun e1 _ e2 -> Add (e1, e2)))
   let rule_add2 = Rule (P (AddExpr, (NT MulExpr) ^^^ ret),
                         A (fun e -> e))
-  let rule_mul1 = Rule (P (MulExpr, (T TInt) ^^^ (T TMul) ^^^ (NT MulExpr) ^^^ ret),
-                        A (fun i _ e -> Mul (Val i, e)))
-  let rule_mul2 = Rule (P (MulExpr, (T TInt) ^^^ ret),
+  let rule_mul1 = Rule (P (MulExpr, (NT ValExpr) ^^^ (T TAsterisk) ^^^ (NT MulExpr) ^^^ ret),
+                        A (fun e1 _ e2 -> Mul (e1, e2)))
+  let rule_mul2 = Rule (P (MulExpr, (NT ValExpr) ^^^ ret),
+                        A (fun e -> e))
+  let rule_val1 = Rule (P (ValExpr, (T TInt) ^^^ ret),
                         A (fun i -> Val i))
+  let rule_val2 = Rule (P (ValExpr, (T TLParen) ^^^ (NT AddExpr) ^^^ (T TRParen) ^^^ ret),
+                        A (fun _ e _ -> e))
   type start_nt = expression
   type start_attrib = expression -> unit -> expression
   let start = rule_start
-  let rules = rule_start @@@ rule_add1 @@@ rule_add2 @@@ rule_mul1 @@@ rule_mul2 @@@ Nil
+  let rules = rule_start @@@ rule_add1 @@@ rule_add2 @@@ rule_mul1 @@@ rule_mul2 @@@ rule_val1 @@@ rule_val2 @@@ Nil
   let () = Printf.printf "rules =\n%s\n" (string_of_rules " " rules)
 
   type grammar = Grammar : rules * 'a n -> grammar

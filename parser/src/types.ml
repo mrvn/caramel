@@ -23,7 +23,7 @@ module type Symbols = sig
   val string_of_n : 'a n -> string
   val string_of_token : 'a token -> string
   val string_of_attrib : 'a attrib -> string
-  val string_of_lexemes : lexeme list -> string
+  val string_of_lexemes : lexeme Input.t -> string
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   val value_of_attrib : 'a attrib -> 'a
   val n_equal : 'a n -> 'b n -> ('a, 'b) Eq.t option
@@ -37,7 +37,7 @@ module type Types = sig
   val string_of_n : 'a n -> string
   val string_of_token : 'a token -> string
   val string_of_attrib : 'a attrib -> string
-  val string_of_lexemes : lexeme list -> string
+  val string_of_lexemes : lexeme Input.t -> string
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   val value_of_attrib : 'a attrib -> 'a
   val n_equal : 'a n -> 'b n -> ('a, 'b) Eq.t option

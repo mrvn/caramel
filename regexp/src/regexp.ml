@@ -26,8 +26,16 @@ type 'a regexp =
   | NotOf of 'a list
 
 let string_of_char escaped c =
-  if (Char.code c < 32) || (Char.code c >= 127)
-  then Printf.sprintf "<%02x>" (Char.code c)
+  if c = '\n'
+  then "\\n"
+  else if c = '\r'
+  then "\\r"
+  else if c = '\t'
+  then "\\t"
+  else if c = ' '
+  then "<space>"
+  else if (Char.code c < 32) || (Char.code c >= 127)
+  then Printf.sprintf "\\%03d" (Char.code c)
   else if List.mem c escaped
   then Printf.sprintf "'\\%c'" c
   else Printf.sprintf "'%c'" c
@@ -147,27 +155,22 @@ module Symbols = struct
 
   let string_of_attrib : type a . a attrib -> string = function
     | ANil -> ""
-    | AChar c ->
-      let i = Char.code c
-      in
-      if (i < 32) || (i >= 127)
-      then Printf.sprintf "\\%03d" i
-      else Printf.sprintf "%c" c
+    | AChar c -> string_of_char ['\\'; '\''] c
 
   let string_of_lexeme (Lexeme (token, attrib)) =
-    let token = string_of_token token in
-    let attrib = string_of_attrib attrib
-    in
-    match (token, attrib) with
-    | (_, "") -> token
-    | _ -> Printf.sprintf "(%s %s)" token attrib
+    match string_of_attrib attrib with
+    | "" -> string_of_token token
+    | attrib -> attrib
     
   let string_of_lexemes lexemes =
-    let rec loop sep str = function
-      | [] -> str
-      | x::xs -> loop " " (str ^ sep ^ (string_of_lexeme x)) xs
+    let (_, str) =
+      List.fold_left
+	(fun (sep, str) (_, lexeme) ->
+	  (" ", (str ^ sep ^ (string_of_lexeme lexeme))))
+	("", "")
+	lexemes
     in
-    loop "" "" lexemes
+    str
 
   module TAssoc = Eq.MAKE(struct type 'a t = 'a token end)
   let equal = TAssoc.equal
@@ -202,16 +205,16 @@ module Grammar = struct
     @@@ Rule (P (Regexp, NT Sequence ^^^ T TEof ^^^ Ret),
 	      A (fun e _ -> e))
 
-    @@@ Rule (P (Sequence, Ret),
-	      A Epsilon)
-    @@@ Rule (P (Sequence, NT Exp ^^^ NT Sequence ^^^ Ret),
-	      A (fun e1 e2 -> concat e1 e2))
     @@@ Rule (P (Sequence, NT Exp ^^^ T TStar ^^^ NT Sequence ^^^ Ret),
 	      A (fun e1 _ e2 -> concat (repeat e1) e2))
     @@@ Rule (P (Sequence, NT Exp ^^^ T TPlus ^^^ NT Sequence ^^^ Ret),
 	      A (fun e1 _ e2 -> concat (concat e1 (repeat e1)) e2))
     @@@ Rule (P (Sequence, NT Exp ^^^ T TOpt ^^^ NT Sequence ^^^ Ret),
 	      A (fun e1 _ e2 -> concat (alternate Epsilon e1) e2))
+    @@@ Rule (P (Sequence, NT Exp ^^^ NT Sequence ^^^ Ret),
+	      A (fun e1 e2 -> concat e1 e2))
+    @@@ Rule (P (Sequence, Ret),
+	      A Epsilon)
 
     @@@ Rule (P (Exp, T TChar ^^^ Ret),
 	      A (fun c -> symbol c))
@@ -225,14 +228,14 @@ module Grammar = struct
     @@@ Rule (P (Exp, T TLParen ^^^ NT Alternate ^^^ T TRParen ^^^ Ret),
 	      A (fun _ e _ -> e))
 
-    @@@ Rule (P (Range, Ret),
-	      A [])
-    @@@ Rule (P (Range, T TChar ^^^ NT Range ^^^ Ret),
-	      A (fun c list -> c :: list))
     @@@ Rule (P (Range, T TPipe ^^^ NT Range ^^^ Ret),
 	      A (fun _ list -> '|' :: list))
     @@@ Rule (P (Range, T TStar ^^^ NT Range ^^^ Ret),
 	      A (fun _ list -> '*' :: list))
+    @@@ Rule (P (Range, T TPlus ^^^ NT Range ^^^ Ret),
+	      A (fun _ list -> '+' :: list))
+    @@@ Rule (P (Range, T TOpt ^^^ NT Range ^^^ Ret),
+	      A (fun _ list -> '?' :: list))
     @@@ Rule (P (Range, T TLParen ^^^ NT Range ^^^ Ret),
 	      A (fun _ list -> '(' :: list))
     @@@ Rule (P (Range, T TRParen ^^^ NT Range ^^^ Ret),
@@ -242,11 +245,15 @@ module Grammar = struct
 		let r = char_range c1 c2
 		in
 		r @ list))
+    @@@ Rule (P (Range, T TChar ^^^ NT Range ^^^ Ret),
+	      A (fun c list -> c :: list))
+    @@@ Rule (P (Range, Ret),
+	      A [])
 
-    @@@ Rule (P (Alternate, NT Sequence ^^^ Ret),
-	      A (fun e -> e))
     @@@ Rule (P (Alternate, NT Sequence ^^^ T TPipe ^^^ NT Alternate ^^^ Ret),
 	      A (fun e1 _ e2 -> alternate e1 e2))
+    @@@ Rule (P (Alternate, NT Sequence ^^^ Ret),
+	      A (fun e -> e))
 
     @@@ Nil
 end
@@ -263,24 +270,27 @@ let explode s =
 
 let lexer list =
   Symbols.(
-    let rec loop acc = function
-      | [] -> List.rev (Lexeme (TEof, ANil) :: acc)
-      | '('::rest -> loop (Lexeme (TLParen, ANil) :: acc) rest
-      | ')'::rest -> loop (Lexeme (TRParen, ANil) :: acc) rest
-      | '['::rest -> loop (Lexeme (TLBracket, ANil) :: acc) rest
-      | ']'::rest -> loop (Lexeme (TRBracket, ANil) :: acc) rest
-      | '^'::rest -> loop (Lexeme (TCaret, ANil) :: acc) rest
-      | '-'::rest -> loop (Lexeme (TDash, ANil) :: acc) rest
-      | '*'::rest -> loop (Lexeme (TStar, ANil) :: acc) rest
-      | '|'::rest -> loop (Lexeme (TPipe, ANil) :: acc) rest
-      | '+'::rest -> loop (Lexeme (TPlus, ANil) :: acc) rest
-      | '?'::rest -> loop (Lexeme (TOpt, ANil) :: acc) rest
-      | '\\'::c::rest -> loop (Lexeme (TChar, AChar c) :: acc) rest
-      | c::rest -> loop (Lexeme (TChar, AChar c) :: acc) rest
+    let rec loop pos acc list =
+      let next = Pos.next pos in
+      match list with
+      | [] -> List.rev ((pos, Lexeme (TEof, ANil)) :: acc)
+      | '('::rest -> loop next ((pos, Lexeme (TLParen, ANil)) :: acc) rest
+      | ')'::rest -> loop next ((pos, Lexeme (TRParen, ANil)) :: acc) rest
+      | '['::rest -> loop next ((pos, Lexeme (TLBracket, ANil)) :: acc) rest
+      | ']'::rest -> loop next ((pos, Lexeme (TRBracket, ANil)) :: acc) rest
+      | '^'::rest -> loop next ((pos, Lexeme (TCaret, ANil)) :: acc) rest
+      | '-'::rest -> loop next ((pos, Lexeme (TDash, ANil)) :: acc) rest
+      | '*'::rest -> loop next ((pos, Lexeme (TStar, ANil)) :: acc) rest
+      | '|'::rest -> loop next ((pos, Lexeme (TPipe, ANil)) :: acc) rest
+      | '+'::rest -> loop next ((pos, Lexeme (TPlus, ANil)) :: acc) rest
+      | '?'::rest -> loop next ((pos, Lexeme (TOpt, ANil)) :: acc) rest
+      | '\\'::c::rest -> loop next ((pos, Lexeme (TChar, AChar c)) :: acc) rest
+      | c::rest -> loop next ((pos, Lexeme (TChar, AChar c)) :: acc) rest
     in
-    loop [] list)
+    loop Pos.start [] list)
 
 let make str =
+  Printf.printf "Regexp.make '%s'\n%!" str;
   let lexemes = lexer (explode str) in
   let (re, _) = Parser.parse 0 Grammar.start lexemes
   in
