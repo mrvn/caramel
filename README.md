@@ -14,7 +14,7 @@ Progress
 --------
 
   * Regular expressions: done
-  * Universl containers: Witnessed
+  * Universal containers: Witnessed
   * Lexer: type sceleton
   * Parser: simple recursive parser
   * compiler: just parser test
