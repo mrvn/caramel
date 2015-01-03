@@ -41,17 +41,22 @@ module TA = struct
     | AInt i -> i
 end
 
-module Lexer = Lexer.MAKE(TA)
+module Lexer' = Lexer.MAKE(TA)
+module Lexer = struct
+  include TA
+  include (Lexer' : module type of Lexer' with type 'a token := 'a TA.token
+					  and type 'a attrib := 'a TA.attrib)
+end
 
 (* test: 3*2+1 *)
-let lexemes = Lexer.(TA.([
+let lexemes = Lexer.([
   lexeme TInt (AInt 3);
   lexeme TMul ANil;
   lexeme TInt (AInt 2);
   lexeme TAdd ANil;
   lexeme TInt (AInt 1);
   lexeme TEof ANil;
-]))
+])
 
 let () = Printf.printf "Input = '%s'\n" (Lexer.string_of_lexemes lexemes)
 
