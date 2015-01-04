@@ -105,18 +105,22 @@ module Symbols = struct
   type 'a n =
   | Start : 'a regexp n
   | Regexp : 'a regexp n
+  | ExpQuant : ('a regexp -> 'a regexp) n
   | Exp : 'a regexp n
   | Sequence : 'a regexp n
   | Range : 'a list n
   | Alternate : 'a regexp n
+  | More : ('a regexp -> 'a regexp) n
 
   let string_of_n : type a . a n -> string = function
   | Start -> "Start"
   | Regexp -> "Regexp"
+  | ExpQuant -> "ExpQuant"
   | Exp -> "Exp"
   | Sequence -> "Sequence"
   | Range -> "Range"
   | Alternate -> "Alternate"
+  | More -> "More"
       
   type 'a token =
   | TChar : char token
@@ -200,21 +204,37 @@ module Grammar = struct
   type start_attrib = char regexp -> char regexp
   let start = Rule (P (Start, NT Regexp ^^^ Ret),
 		    A (fun e -> e))
+
+    (* Regexp    := Sequence <eof>
+     * Sequence  := Exp ExpQuant Sequence | ""
+     * ExpQuant  := '*' | '+' | '?' | ""
+     * Exp       := <char> | '-' | '[' Range ']' | '[' '^' Range ']'
+     *            | '(' Alternate ')'
+     * Range     := '|' Range | '*' Range | '+' Range | '?' Range
+     *            | '(' Range | ')' Range | <char> '-' <char>
+     *            | <char> Range | ""
+     * Alternate := Sequence More
+     * More      := '|' Alternate | ""
+     *)
+       
   let rules =
     start
     @@@ Rule (P (Regexp, NT Sequence ^^^ T TEof ^^^ Ret),
 	      A (fun e _ -> e))
 
-    @@@ Rule (P (Sequence, NT Exp ^^^ T TStar ^^^ NT Sequence ^^^ Ret),
-	      A (fun e1 _ e2 -> concat (repeat e1) e2))
-    @@@ Rule (P (Sequence, NT Exp ^^^ T TPlus ^^^ NT Sequence ^^^ Ret),
-	      A (fun e1 _ e2 -> concat (concat e1 (repeat e1)) e2))
-    @@@ Rule (P (Sequence, NT Exp ^^^ T TOpt ^^^ NT Sequence ^^^ Ret),
-	      A (fun e1 _ e2 -> concat (alternate Epsilon e1) e2))
-    @@@ Rule (P (Sequence, NT Exp ^^^ NT Sequence ^^^ Ret),
-	      A (fun e1 e2 -> concat e1 e2))
+    @@@ Rule (P (Sequence, NT Exp ^^^ NT ExpQuant ^^^ NT Sequence ^^^ Ret),
+	      A (fun e1 fn e2 -> concat (fn e1) e2))
     @@@ Rule (P (Sequence, Ret),
 	      A Epsilon)
+
+    @@@ Rule (P (ExpQuant, T TStar ^^^ Ret),
+	      A (fun _ -> fun e -> repeat e))
+    @@@ Rule (P (ExpQuant, T TPlus ^^^ Ret),
+	      A (fun _ -> fun e -> concat e (repeat e)))
+    @@@ Rule (P (ExpQuant, T TOpt ^^^ Ret),
+	      A (fun _ -> fun e -> alternate Epsilon e))
+    @@@ Rule (P (ExpQuant, Ret),
+	      A (fun e -> e))
 
     @@@ Rule (P (Exp, T TChar ^^^ Ret),
 	      A (fun c -> symbol c))
@@ -250,9 +270,12 @@ module Grammar = struct
     @@@ Rule (P (Range, Ret),
 	      A [])
 
-    @@@ Rule (P (Alternate, NT Sequence ^^^ T TPipe ^^^ NT Alternate ^^^ Ret),
-	      A (fun e1 _ e2 -> alternate e1 e2))
-    @@@ Rule (P (Alternate, NT Sequence ^^^ Ret),
+    @@@ Rule (P (Alternate, NT Sequence ^^^ NT More ^^^ Ret),
+	      A (fun e fn -> fn e))
+
+    @@@ Rule (P (More, T TPipe ^^^ NT Alternate ^^^ Ret),
+	      A (fun _ e2 -> fun e1 -> alternate e1 e2))
+    @@@ Rule (P (More, Ret),
 	      A (fun e -> e))
 
     @@@ Nil
