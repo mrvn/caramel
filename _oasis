@@ -30,7 +30,7 @@ Library common
 Library univ
   Path: univ
   Pack: true
-  InternalModules: src/Witnessed
+  InternalModules: src/Witnessed, src/Box
   Install: false
   CompiledObject: best
   BuildDepends: common
@@ -42,6 +42,14 @@ Library parser
   Install: false
   CompiledObject: best
   BuildDepends: common
+
+Library parser2
+  Path: parser2
+  Pack: false
+  Modules: src/ParserTypes, src/Parser2
+  Install: false
+  CompiledObject: best
+  BuildDepends: common, univ
 
 Library regexp
   Path: regexp
@@ -64,7 +72,7 @@ Executable comp
   Install: true
   CompiledObject: best
   MainIs: comp.ml
-  BuildDepends: common, univ, lexer, parser
+  BuildDepends: common, univ, lexer, parser, parser2
 
 Test main
   Command: test/test.sh

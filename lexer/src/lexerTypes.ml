@@ -72,6 +72,10 @@ module MAKE(TA : TA) : LexerTypes with type 'a token = 'a TA.token
     type 'a value = 'a attrib
     let string_of_key = string_of_token
     let string_of_value = string_of_attrib
+    type ('a, 'b) conv = {
+      key : 'c . 'c key -> 'a;
+      value : 'c . 'c value -> 'b;
+    }
   end
   module Boxed = Univ.Witnessed.MAKE(W)
   type lexeme = Boxed.t

@@ -20,24 +20,38 @@ module type Witness = sig
   type 'a value
   val string_of_key : 'a key -> string
   val string_of_value : 'a value -> string
+  (* Conversion needs universal functions, which requires wrapping
+   * them in a record. Otherwise ocaml complains that the type escapes.
+   *)
+  type ('a, 'b) conv = {
+    key : 'c . 'c key -> 'a;
+    value : 'c . 'c value -> 'b;
+  }
 end
 
 module type Witnessed = sig
   type 'a key
   type 'a value
   type t
+  type ('a, 'b) conv
   val box : 'a key -> 'a value -> t
   val unbox_opt : 'a key -> t -> ('a key * 'a value) option
   val value_opt : 'a key -> t -> 'a value option
   val as_strings : t -> (string * string)
+  val conv : ('a, 'b) conv -> t -> ('a * 'b)
 end
 
 module MAKE(W : Witness) : Witnessed with type 'a key = 'a W.key
-				     and type 'a value = 'a W.value = struct
+				     and type 'a value = 'a W.value
+                                     and type ('a, 'b) conv = ('a, 'b) W.conv = struct
   type 'a key = 'a W.key
   type 'a value = 'a W.value
   type t = Box : 'a key * 'a value -> t
-  module Assoc = Eq.MAKE(struct type 'a t = 'a key end)
+  module G = struct
+    type 'a t = 'a key
+    let to_string = W.string_of_key
+  end
+  module Assoc = Eq.MAKE(G)
   let equal = Assoc.equal
   let cast_key = Assoc.cast
   let cast_value : type a b . (a, b) Eq.t -> a value -> b value
@@ -57,17 +71,15 @@ module MAKE(W : Witness) : Witnessed with type 'a key = 'a W.key
     | None -> None
     | Some equality -> Some (cast_value equality v)
 
-  (* Conversion to string needs universal functions, which requires
-   * wrapping them in a record. Otherwise ocaml complains that the type
-   * escapes.
+  (* Conversion needs universal functions, which requires wrapping
+   * them in a record. Otherwise ocaml complains that the type escapes.
    *)
-  type conv = {
-    key : 'a . 'a key -> string;
-    value : 'a . 'a value -> string;
+  type ('a, 'b) conv = ('a, 'b) W.conv
+  let conv conv (Box (k, v)) = (conv.W.key k, conv.W.value v)
+    
+  let string_conv = {
+    W.key = W.string_of_key;
+    W.value = W.string_of_value;
   }
-  let conv = {
-    key = W.string_of_key;
-    value = W.string_of_value;
-  }
-  let as_strings (Box (k, v)) = (conv.key k, conv.value v)
+  let as_strings (Box (k, v)) = (string_conv.W.key k, string_conv.W.value v)
 end;;

@@ -176,7 +176,11 @@ module Symbols = struct
     in
     str
 
-  module TAssoc = Eq.MAKE(struct type 'a t = 'a token end)
+  module T = struct
+    type 'a t = 'a token
+    let to_string = string_of_token
+  end
+  module TAssoc = Eq.MAKE(T)
   let equal = TAssoc.equal
 
   let cast : type a b . (a, b) Eq.t -> a attrib -> b attrib = fun Eq.Refl x -> x
@@ -191,7 +195,11 @@ module Symbols = struct
     | ANil -> ()
     | AChar c -> c
 
-  module NAssoc = Eq.MAKE(struct type 'a t = 'a n end)
+  module N = struct
+    type 'a t = 'a n
+    let to_string = string_of_n
+  end
+  module NAssoc = Eq.MAKE(N)
   let n_equal = NAssoc.equal
 end
 

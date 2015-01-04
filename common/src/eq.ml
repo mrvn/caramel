@@ -22,6 +22,7 @@ include Eq
 
 module type GADT = sig
   type 'a t
+  val to_string : 'a t -> string
 end
 
 module type Assoc = sig
