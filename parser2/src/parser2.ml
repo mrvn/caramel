@@ -561,7 +561,8 @@ let string_of_item (Item (rule, pos, la)) =
   Printf.sprintf "%s := %s  << \"%s\""
     n
     syms
-    (List.fold_left (fun str term -> str ^ " " ^ (string_of_terminal term)) "" la)
+(*    (List.fold_left (fun str term -> str ^ " " ^ (string_of_terminal term)) "" la)
+*)    (Util.string_of_list string_of_terminal " " la)
 
 let rec print_state indent = function
   | [] -> ()

@@ -23,7 +23,7 @@ Flag strict
 Library common
   Path: common
   Pack: false
-  Modules: src/Eq, src/Pos, src/Input
+  Modules: src/Eq, src/Pos, src/Input, src/Util
   Install: false
   CompiledObject: best
 
