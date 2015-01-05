@@ -76,6 +76,11 @@ module type Types = sig
   val string_of_symbol_attribution : 'a symbol_attribution -> string
   type rule
   val rule : 'a n -> 'a symbol_attribution -> rule
+  type ('a, 'b) rule_conv = {
+    key : 'c . 'c n -> 'a;
+    value : 'c . 'c symbol_attribution -> 'b;
+  }
+  val rule_conv : ('a, 'b) rule_conv -> rule -> ('a * 'b)
   val symbol_attribution_opt : 'a n -> rule -> 'a symbol_attribution option
   val rules_with_lhs : nonterminal -> rule list -> rule list
   val rule_has_n : 'a n -> rule -> bool
@@ -174,6 +179,13 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
   end
   module Boxed = Univ.Witnessed.MAKE(W)
   type rule = Boxed.t
+
+  type ('a, 'b) rule_conv = ('a, 'b) Boxed.conv = {
+    key : 'c . 'c n -> 'a;
+    value : 'c . 'c symbol_attribution -> 'b;
+  }
+  let rule_conv conv rule = Boxed.conv conv rule
+
   let rule n symbol_attribution = Boxed.box n symbol_attribution
 
   let rules_with_lhs (NTBox.Box n) rules =

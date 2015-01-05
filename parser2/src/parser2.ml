@@ -49,6 +49,11 @@ module type Grammar = sig
   val string_of_symbol_attribution : 'a symbol_attribution -> string
   type rule
   val rule : 'a n -> 'a symbol_attribution -> rule
+  type ('a, 'b) rule_conv = {
+    key : 'c . 'c n -> 'a;
+    value : 'c . 'c symbol_attribution -> 'b;
+  }
+  val rule_conv : ('a, 'b) rule_conv -> rule -> ('a * 'b)
   val symbol_attribution_opt : 'a n -> rule -> 'a symbol_attribution option
   val rules_with_lhs : nonterminal -> rule list -> rule list
   val rule_has_n : 'a n -> rule -> bool
@@ -534,9 +539,28 @@ let select_lookahead_item item_set l =
 exception Parse_error
 
 let string_of_item (Item (rule, pos, la)) =
-  Printf.sprintf "%s [%d]%s"
-    (string_of_rule rule)
-    pos
+  let string_of_doted_symbol_attribution : type a . a symbol_attribution -> string = function SA (symbols, _) ->
+    let rec loop : type a b . int -> string -> string -> (a, b) symbols -> string = fun pos sep str symbols ->
+      if pos = 0
+      then loop (pos - 1) " " (str ^ sep ^ ".") symbols
+      else
+        match symbols with
+        | Ret -> str
+        | Arg (sym, syms) ->
+          loop (pos - 1) " " (str ^ sep ^ (string_of_symbol sym)) syms
+    in
+    loop pos "" "" symbols
+  in
+  let conv = {
+    key = string_of_n;
+    value =  string_of_doted_symbol_attribution;
+  }
+  in
+  let (n, syms) = rule_conv conv rule
+  in
+  Printf.sprintf "%s := %s  << \"%s\""
+    n
+    syms
     (List.fold_left (fun str term -> str ^ " " ^ (string_of_terminal term)) "" la)
 
 let rec print_state indent = function
