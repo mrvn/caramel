@@ -22,8 +22,13 @@ module type Rules = sig
   val string_of_token : 'a token -> string
   val string_of_attrib : 'a attrib -> string
   val value_of_attrib : 'a attrib -> 'a
+  type ('a, 'b) lexeme_conv = {
+    key : 'c . 'c token -> 'a;
+    value : 'c . 'c attrib -> 'b;
+  }
   type lexeme
   val lexeme : 'a token -> 'a attrib -> lexeme
+  val lexeme_conv : ('a, 'b) lexeme_conv -> lexeme -> ('a * 'b)
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   val has_token : 'a token -> lexeme -> bool
   val string_of_lexeme : lexeme -> string

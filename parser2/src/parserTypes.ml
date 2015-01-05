@@ -19,10 +19,16 @@ module type Symbols = sig
   type 'a n
   type 'a token
   type 'a attrib
+  type ('a, 'b) lexeme_conv = {
+    key : 'c . 'c token -> 'a;
+    value : 'c . 'c attrib -> 'b;
+  }
   type lexeme
+  val lexeme_conv : ('a, 'b) lexeme_conv -> lexeme -> ('a * 'b)
   val string_of_n : 'a n -> string
   val string_of_token : 'a token -> string
   val string_of_attrib : 'a attrib -> string
+  val string_of_lexeme : lexeme -> string
   val string_of_lexemes : lexeme Input.t -> string
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   val value_of_attrib : 'a attrib -> 'a
@@ -34,10 +40,16 @@ module type Types = sig
   type 'a n
   type 'a token
   type 'a attrib
+  type ('a, 'b) lexeme_conv = {
+    key : 'c . 'c token -> 'a;
+    value : 'c . 'c attrib -> 'b;
+  }
   type lexeme
+  val lexeme_conv : ('a, 'b) lexeme_conv -> lexeme -> ('a * 'b)
   val string_of_n : 'a n -> string
   val string_of_token : 'a token -> string
   val string_of_attrib : 'a attrib -> string
+  val string_of_lexeme : lexeme -> string
   val string_of_lexemes : lexeme Input.t -> string
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   val value_of_attrib : 'a attrib -> 'a
@@ -47,6 +59,7 @@ module type Types = sig
   type terminal
   val terminal : 'a token -> terminal
   val string_of_terminal : terminal -> string
+  val terminal_of_lexeme : lexeme -> terminal
   type nonterminal
   val nonterminal : 'a n -> nonterminal
   val string_of_nonterminal : nonterminal -> string
@@ -64,12 +77,23 @@ module type Types = sig
   type rule
   val rule : 'a n -> 'a symbol_attribution -> rule
   val symbol_attribution_opt : 'a n -> rule -> 'a symbol_attribution option
+  val rules_with_lhs : nonterminal -> rule list -> rule list
+  val rule_has_n : 'a n -> rule -> bool
+  val rule_length : rule -> int
   type usymbol = UNT of nonterminal | UT of terminal
   type urule = nonterminal * usymbol list
   val urule : rule -> urule
+  val nonterminal_of_rule : rule -> nonterminal
   val string_of_rule : rule -> string
   type rules = rule list
   val string_of_rules : string -> rules -> string
+  type expr
+  val expr : 'a n -> 'a -> expr
+  val value_of_expr_opt : 'a n -> expr -> 'a option
+  type stack_item =
+  | Lexeme of lexeme
+  | Expr of expr
+  val rule_apply : rule -> stack_item list -> stack_item
 end
 
 module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
@@ -86,7 +110,16 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
   type terminal = TBox.t
   let terminal t = TBox.box t
   let string_of_terminal t = TBox.to_string t
-
+  let terminal_of_lexeme lexeme =
+    let conv = {
+      key = terminal;
+      value = (fun _ -> ());
+    }
+    in
+    let (term, _) = lexeme_conv conv lexeme
+    in
+    term
+    
   (* universal type for non-terminals *)
   module N = struct
     type 'a t = 'a n
@@ -119,6 +152,10 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
     in
     loop "" "" symbols
 
+  let rec symbols_length : type a b . (a, b) symbols -> int = function
+    | Ret -> 0
+    | Arg (_, rest) -> 1 + symbols_length rest
+      
   let ret : ('a, 'a) symbols = Ret
   let ( ^^^ ) x y = Arg (x, y)
 
@@ -134,15 +171,26 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
     type 'a value = 'a symbol_attribution
     let string_of_key = string_of_n
     let string_of_value = string_of_symbol_attribution
-    type ('a, 'b) conv = {
-      key : 'c . 'c key -> 'a;
-      value : 'c . 'c value -> 'b;
-    }
   end
   module Boxed = Univ.Witnessed.MAKE(W)
   type rule = Boxed.t
   let rule n symbol_attribution = Boxed.box n symbol_attribution
 
+  let rules_with_lhs (NTBox.Box n) rules =
+    List.filter (Boxed.has_key n) rules
+
+  let rule_has_n n rule = Boxed.has_key n rule
+
+  let rule_length rule =
+    let conv = {
+      Boxed.key = (function _ -> ());
+      Boxed.value = (function SA (syms, m_) -> symbols_length syms);
+    }
+    in
+    let (_, len) = Boxed.conv conv rule
+    in
+    len
+    
   type usymbol = UNT of nonterminal | UT of terminal
   type urule = nonterminal * usymbol list
   let urule rule =
@@ -157,12 +205,17 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
         sym :: (map_symbols syms)
     in
     let conv = {
-      W.key = nonterminal;
-      W.value = (function SA (symbols, _) -> map_symbols symbols);
+      Boxed.key = nonterminal;
+      Boxed.value = (function SA (symbols, _) -> map_symbols symbols);
     }
     in
     Boxed.conv conv rule
 
+  let nonterminal_of_rule rule =
+    let (nt, _) = urule rule
+    in
+    nt
+      
   (* return Some symbol_attribution if the non-terminal matches the rule *)
   let symbol_attribution_opt n rule = Boxed.value_opt n rule
 
@@ -182,4 +235,47 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
         rules
     in
     str
+
+  module V = struct
+    type 'a key = 'a n
+    type 'a value = 'a
+    let string_of_key = string_of_n
+    let string_of_value = fun _ -> "<value>"
+  end
+  module U = Univ.Witnessed.MAKE(V)
+  type expr = U.t
+  let expr n v = U.box n v
+  let value_of_expr_opt n t = U.value_opt n t
+
+  type stack_item =
+  | Lexeme of lexeme
+  | Expr of expr
+
+  let rule_apply (rule : rule) (items : stack_item list) =
+    let rec loop rule items =
+      match (rule, items) with
+      | (Boxed.Box (n, SA (Ret, attribution)), []) -> Expr (expr n attribution)
+      | (Boxed.Box (n, SA (Arg (sym, symbols), attribution)), item::items) ->
+        begin
+          let attribution =
+            match (sym, item) with
+            | (NT n, Expr expr) ->
+              begin
+                match value_of_expr_opt n expr with
+                | Some v -> attribution v
+                | None -> assert false
+              end
+            | (T t, Lexeme lexeme) ->
+              begin
+                match attrib_opt t lexeme with
+                | Some a -> attribution (value_of_attrib a)
+                | None -> assert false
+              end
+            | _ -> assert false
+          in
+          loop (Boxed.Box (n, (SA (symbols, attribution)))) items
+        end
+      | _ -> assert false
+    in
+    loop rule items
 end

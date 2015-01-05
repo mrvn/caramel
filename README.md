@@ -17,7 +17,7 @@ Progress
   * Universal containers: Witnessed
   * Lexer: done
   * Parser: simple recursive parser
-  * Parser: begining of LR parser
+  * Parser: finish SLR(k) parser
   * tokenize: begining of the language
   * compiler: tokenize and parse from stdin
   * compiler: print first and follow from LR parser

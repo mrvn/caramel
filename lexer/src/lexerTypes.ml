@@ -48,10 +48,15 @@ module type LexerTypes = sig
   val string_of_attrib : 'a attrib -> string
   val value_of_attrib : 'a attrib -> 'a
 
+  type ('a, 'b) lexeme_conv = {
+    key : 'c . 'c token -> 'a;
+    value : 'c . 'c attrib -> 'b;
+  }
   (* output type of the lexer (lexeme Input.t) *)
   type lexeme
   (* helper function to create a lexeme *)
   val lexeme : 'a token -> 'a attrib -> lexeme
+  val lexeme_conv : ('a, 'b) lexeme_conv -> lexeme -> ('a * 'b)
   (* return Some attrib if the token matches the lexeme *)
   val attrib_opt : 'a token -> lexeme -> 'a attrib option
   (* return true if the token matches the lexeme *)
@@ -72,16 +77,18 @@ module MAKE(TA : TA) : LexerTypes with type 'a token = 'a TA.token
     type 'a value = 'a attrib
     let string_of_key = string_of_token
     let string_of_value = string_of_attrib
-    type ('a, 'b) conv = {
-      key : 'c . 'c key -> 'a;
-      value : 'c . 'c value -> 'b;
-    }
   end
   module Boxed = Univ.Witnessed.MAKE(W)
   type lexeme = Boxed.t
-
+  type ('a, 'b) lexeme_conv = ('a, 'b) Boxed.conv = {
+    key : 'c . 'c Boxed.key -> 'a;     
+    value : 'c . 'c Boxed.value -> 'b;
+  }
+    
   (* helper function to create a lexeme *)
   let lexeme token attrib = Boxed.box token attrib
+
+  let lexeme_conv conv lexeme = Boxed.conv conv lexeme
 
   (* return Some attrib if the token matches the lexeme *)
   let attrib_opt token lexeme = Boxed.value_opt token lexeme

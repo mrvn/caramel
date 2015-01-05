@@ -17,7 +17,7 @@
 
 module type Boxed = sig
   type 'a value
-  type t
+  type t = Box : 'a value -> t
   val box : 'a value -> t
   (* val unbox : t -> 'a value *)
   val to_string : t -> string

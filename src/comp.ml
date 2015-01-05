@@ -156,9 +156,15 @@ module Grammar2 = struct
     type 'a attrib = 'a Tokenize.attrib
     let string_of_attrib = Tokenize.string_of_attrib
     type lexeme = Tokenize.lexeme
+    let string_of_lexeme = Tokenize.string_of_lexeme
     let string_of_lexemes = Tokenize.string_of_lexemes
     let attrib_opt = Tokenize.attrib_opt
     let value_of_attrib = Tokenize.value_of_attrib
+    type ('a, 'b) lexeme_conv = ('a, 'b) Tokenize.lexeme_conv = {
+      key : 'c. 'c token -> 'a;
+      value : 'c. 'c attrib -> 'b;
+    }
+    let lexeme_conv = Tokenize.lexeme_conv
   end
   open Symbols
 
@@ -203,7 +209,6 @@ module Grammar2 = struct
 end
 
 module Parser2 = Parser2.MAKE(Grammar2)
-  (*
-let (exp, _) = Parser2.parse 0 Grammar.start lexemes
-let () = Printf.printf "Parsed = '%s'\n" (Grammar.Symbols.string_of_expression exp)
-  *)
+let exp = Parser2.parse lexemes
+let () = Printf.printf "Parsed = '%s'\n" (Grammar2.Symbols.string_of_expression exp)
+

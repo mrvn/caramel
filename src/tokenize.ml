@@ -407,4 +407,5 @@ include (Lexer' : module type of Lexer' with type 'a token := 'a Rules.token
                                         and type symbol := Rules.symbol
                                         and type action := Rules.action
                                         and type rule := Rules.rule
-                                        and type scan_one := Rules.scan_one)
+                                        and type scan_one := Rules.scan_one
+                                        and type ('a, 'b) lexeme_conv := ('a, 'b) Rules.lexeme_conv)

@@ -20,6 +20,12 @@ module type Witness = sig
   type 'a value
   val string_of_key : 'a key -> string
   val string_of_value : 'a value -> string
+end
+
+module type Witnessed = sig
+  type 'a key
+  type 'a value
+  type t = Box : 'a key * 'a value -> t
   (* Conversion needs universal functions, which requires wrapping
    * them in a record. Otherwise ocaml complains that the type escapes.
    *)
@@ -27,25 +33,19 @@ module type Witness = sig
     key : 'c . 'c key -> 'a;
     value : 'c . 'c value -> 'b;
   }
-end
-
-module type Witnessed = sig
-  type 'a key
-  type 'a value
-  type t
-  type ('a, 'b) conv
   val box : 'a key -> 'a value -> t
   val unbox_opt : 'a key -> t -> ('a key * 'a value) option
   val value_opt : 'a key -> t -> 'a value option
   val as_strings : t -> (string * string)
   val conv : ('a, 'b) conv -> t -> ('a * 'b)
+  val has_key : 'a key -> t -> bool
+  val lookup : 'a key -> t list -> 'a value list
 end
 
 module MAKE(W : Witness) : Witnessed with type 'a key = 'a W.key
-				     and type 'a value = 'a W.value
-                                     and type ('a, 'b) conv = ('a, 'b) W.conv = struct
-  type 'a key = 'a W.key
-  type 'a value = 'a W.value
+				     and type 'a value = 'a W.value = struct
+  include W
+
   type t = Box : 'a key * 'a value -> t
   module G = struct
     type 'a t = 'a key
@@ -74,12 +74,32 @@ module MAKE(W : Witness) : Witnessed with type 'a key = 'a W.key
   (* Conversion needs universal functions, which requires wrapping
    * them in a record. Otherwise ocaml complains that the type escapes.
    *)
-  type ('a, 'b) conv = ('a, 'b) W.conv
-  let conv conv (Box (k, v)) = (conv.W.key k, conv.W.value v)
+  type ('a, 'b) conv = {
+    key : 'c . 'c key -> 'a;
+    value : 'c . 'c value -> 'b;
+  }
+  let conv conv (Box (k, v)) = (conv.key k, conv.value v)
     
   let string_conv = {
-    W.key = W.string_of_key;
-    W.value = W.string_of_value;
+    key = string_of_key;
+    value = string_of_value;
   }
-  let as_strings (Box (k, v)) = (string_conv.W.key k, string_conv.W.value v)
-end;;
+  let as_strings t = conv string_conv t
+
+  let has_key key (Box (k, v)) =
+    match equal k key with
+    | None -> false
+    | Some _ -> true
+
+  let lookup : type a . a key -> t list -> a value list = fun key list ->
+    let rec loop acc = function
+      | [] -> acc
+      | x :: xs ->
+        loop
+          (match value_opt key x with
+          | None -> acc
+          | Some v -> v :: acc)
+          xs
+    in
+    loop [] list
+end
