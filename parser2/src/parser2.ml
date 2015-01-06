@@ -39,10 +39,10 @@ module type Grammar = sig
   type 'a symbol = NT of 'a n | T of 'a token
   val string_of_symbol : 'a symbol -> string
   type (_, _) symbols =
-  | Ret : ('a, 'a) symbols
+  | Ret : ('a, Pos.t -> 'a) symbols
   | Arg : 'a symbol * ('b, 'c) symbols -> ('b, 'a -> 'c) symbols
   val string_of_symbols : ('a, 'b) symbols -> string
-  val ret : ('a, 'a) symbols
+  val ret : ('a, Pos.t -> 'a) symbols
   val ( ^^^ ) : 'a symbol -> ('b, 'c) symbols -> ('b, 'a -> 'c) symbols
   type 'a symbol_attribution =
   | SA : ('a, 'b) symbols * 'b -> 'a symbol_attribution
@@ -81,9 +81,9 @@ module type Grammar = sig
   val expr : 'a n -> 'a -> expr
   val value_of_expr_opt : 'a n -> expr -> 'a option
   type stack_item =
-  | Lexeme of lexeme
-  | Expr of expr
-  val rule_apply : rule -> stack_item list -> stack_item
+  | Lexeme of Pos.t * lexeme
+  | Expr of Pos.t * expr
+  val rule_apply : rule -> stack_item list -> Pos.t * expr
 end
 
 (* List utilities *)
@@ -536,7 +536,7 @@ let select_lookahead_item item_set l =
   | item::_ -> Some item
 
 (* parser with attribute evaluation *)
-exception Parse_error
+exception Parse_error of Pos.t
 
 let string_of_item (Item (rule, pos, la)) =
   let string_of_doted_symbol_attribution : type a . a symbol_attribution -> string = function SA (symbols, _) ->
@@ -583,12 +583,11 @@ let parse (stream : lexeme Input.t) =
       let length_rhs = rule_length rule
       in
       begin
-        match rule_apply rule (List.rev (take length_rhs attribute_instances)) with
-        | Lexeme _ -> assert false
-        | Expr e ->
-          match value_of_expr_opt start e with
-          | Some v -> v
-          | None -> assert false
+        let (_, expr) = rule_apply rule (List.rev (take length_rhs attribute_instances))
+        in
+        match value_of_expr_opt start expr with
+        | Some v -> v
+        | None -> assert false
       end
     | _ ->
       let closure = compute_closure  state in
@@ -610,7 +609,7 @@ let parse (stream : lexeme Input.t) =
       | (pos, lexeme) :: rest when
           List.mem (terminal_of_lexeme lexeme) (next_terminals closure) ->
         Printf.printf "%spushing lexeme %s\n" indent (string_of_lexeme lexeme);
-        c0 (UT (terminal_of_lexeme lexeme)) (Lexeme lexeme) rest
+        c0 (UT (terminal_of_lexeme lexeme)) (Lexeme (pos, lexeme)) rest
       | _ ->
         match select_lookahead_item 
           (accept_items closure) 
@@ -618,15 +617,16 @@ let parse (stream : lexeme Input.t) =
              (fun (_, lexeme) -> terminal_of_lexeme lexeme)
              (truncate k stream))
         with
-        | None -> Printf.printf "%slookahead failed\n" indent; raise Parse_error
+        | None -> Printf.printf "%slookahead failed\n" indent; raise @@ Parse_error (Input.pos stream)
         | Some item ->
           Printf.printf "%slookahead item = %s\n" indent (string_of_item item);
           let Item (rule, _, _) = item in
-          let length_rhs = rule_length rule
+          let length_rhs = rule_length rule in
+          let (pos, expr) = rule_apply rule (List.rev (take length_rhs attribute_instances))
           in
           (List.nth (c0::continuations) length_rhs)
             (UNT (nonterminal_of_rule rule))
-            (rule_apply rule (List.rev (take length_rhs attribute_instances)))
+            (Expr (pos, expr))
             stream
   in
   parse 0 [start_item] [] [] stream

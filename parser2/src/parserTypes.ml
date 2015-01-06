@@ -66,10 +66,10 @@ module type Types = sig
   type 'a symbol = NT of 'a n | T of 'a token
   val string_of_symbol : 'a symbol -> string
   type (_, _) symbols =
-  | Ret : ('a, 'a) symbols
+  | Ret : ('a, Pos.t -> 'a) symbols
   | Arg : 'a symbol * ('b, 'c) symbols -> ('b, 'a -> 'c) symbols
   val string_of_symbols : ('a, 'b) symbols -> string
-  val ret : ('a, 'a) symbols
+  val ret : ('a, Pos.t -> 'a) symbols
   val ( ^^^ ) : 'a symbol -> ('b, 'c) symbols -> ('b, 'a -> 'c) symbols
   type 'a symbol_attribution =
   | SA : ('a, 'b) symbols * 'b -> 'a symbol_attribution
@@ -96,9 +96,9 @@ module type Types = sig
   val expr : 'a n -> 'a -> expr
   val value_of_expr_opt : 'a n -> expr -> 'a option
   type stack_item =
-  | Lexeme of lexeme
-  | Expr of expr
-  val rule_apply : rule -> stack_item list -> stack_item
+  | Lexeme of Pos.t * lexeme
+  | Expr of Pos.t * expr
+  val rule_apply : rule -> stack_item list -> Pos.t * expr
 end
 
 module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
@@ -144,7 +144,7 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
   | T token -> string_of_token token
 
   type (_, _) symbols =
-  | Ret : ('a, 'a) symbols
+  | Ret : ('a, Pos.t -> 'a) symbols
   | Arg : 'a symbol * ('b, 'c) symbols -> ('b, 'a -> 'c) symbols
 
   let rec string_of_symbols symbols =
@@ -161,7 +161,7 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
     | Ret -> 0
     | Arg (_, rest) -> 1 + symbols_length rest
       
-  let ret : ('a, 'a) symbols = Ret
+  let ret : ('a, Pos.t -> 'a) symbols = Ret
   let ( ^^^ ) x y = Arg (x, y)
 
   type 'a symbol_attribution =
@@ -260,34 +260,36 @@ module MAKE(S : Symbols) : Types with type 'a n = 'a S.n
   let value_of_expr_opt n t = U.value_opt n t
 
   type stack_item =
-  | Lexeme of lexeme
-  | Expr of expr
+  | Lexeme of Pos.t * lexeme
+  | Expr of Pos.t * expr
 
   let rule_apply (rule : rule) (items : stack_item list) =
-    let rec loop rule items =
+    let rec loop rule pos items =
       match (rule, items) with
-      | (Boxed.Box (n, SA (Ret, attribution)), []) -> Expr (expr n attribution)
+      | (Boxed.Box (n, SA (Ret, attribution)), []) -> (pos, expr n (attribution pos))
       | (Boxed.Box (n, SA (Arg (sym, symbols), attribution)), item::items) ->
         begin
-          let attribution =
+          let (pos2, attribution) =
             match (sym, item) with
-            | (NT n, Expr expr) ->
+            | (NT n, Expr (pos2, expr)) ->
               begin
                 match value_of_expr_opt n expr with
-                | Some v -> attribution v
+                | Some v -> (pos2, attribution v)
                 | None -> assert false
               end
-            | (T t, Lexeme lexeme) ->
+            | (T t, Lexeme (pos2, lexeme)) ->
               begin
                 match attrib_opt t lexeme with
-                | Some a -> attribution (value_of_attrib a)
+                | Some a -> (pos2, attribution (value_of_attrib a))
                 | None -> assert false
               end
             | _ -> assert false
           in
-          loop (Boxed.Box (n, (SA (symbols, attribution)))) items
+          let pos = Pos.merge pos pos2
+          in
+          loop (Boxed.Box (n, (SA (symbols, attribution)))) pos items
         end
       | _ -> assert false
     in
-    loop rule items
+    loop rule Pos.nil items
 end

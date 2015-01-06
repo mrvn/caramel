@@ -114,7 +114,7 @@ module MAKE(TA : TA) : LexerTypes with type 'a token = 'a TA.token
 	     str
 	     sep
 	     (string_of_lexeme lexeme)
-	     (Pos.string_of_t pos)))
+	     (Pos.to_string pos)))
         ("", "")
         lexemes
     in

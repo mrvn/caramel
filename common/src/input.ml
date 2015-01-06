@@ -13,5 +13,5 @@ let from_stdin () =
   all_input [] Pos.start
 
 let pos = function
-  | [] -> raise @@ Invalid_argument "Empty input"
+  | [] -> Pos.nil
   | (pos, _) :: _ -> pos

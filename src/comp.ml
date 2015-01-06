@@ -19,8 +19,8 @@ let input = Input.from_stdin ()
 let lexemes =
   try
     Tokenize.scan input
-  with Tokenize.Scan_error(pos) ->
-    Printf.printf "Scan error at %s\n" (Pos.string_of_t pos);
+  with Tokenize.Scan_error pos ->
+    Printf.printf "Scan error at %s\n" (Pos.to_string pos);
     exit 1
 (*  
 (* test: 3*2+1 *)
@@ -111,25 +111,40 @@ module Grammar = struct
   let () = Printf.printf "rules =\n%s\n" (string_of_rules " " rules)
 
 end
-
+(*
 module Parser = Parser.MAKE(Grammar)
 let (exp, _) = Parser.parse 0 Grammar.start lexemes
 let () = Printf.printf "Parsed = '%s'\n" (Grammar.Symbols.string_of_expression exp)
-
+*)
 
 
 module Grammar2 = struct
   module Symbols = struct
     type expression =
-    | Val of int
-    | Add of expression * expression
-    | Mul of expression * expression
+    | Val of Pos.t * int
+    | Add of Pos.t * expression * expression
+    | Mul of Pos.t * expression * expression
 
     let rec string_of_expression = function
-      | Val i -> string_of_int i
-      | Add (e1, e2) -> Printf.sprintf "(%s + %s)" (string_of_expression e1) (string_of_expression e2)
-      | Mul (e1, e2) -> Printf.sprintf "(%s * %s)" (string_of_expression e1) (string_of_expression e2)
+      | Val (pos, i) -> string_of_int i
+      | Add (pos, e1, e2) -> Printf.sprintf "(%s + %s)" (string_of_expression e1) (string_of_expression e2)
+      | Mul (pos, e1, e2) -> Printf.sprintf "(%s * %s)" (string_of_expression e1) (string_of_expression e2)
 
+    let pos_of_expression = function
+      | Val (pos, _)
+      | Add (pos, _, _)
+      | Mul (pos, _, _) -> pos
+
+    let rec pos_string_of_expression expr =
+      let all = Pos.to_dashes (pos_of_expression expr) in
+      let sub =
+        match expr with
+        | Val (pos, i) -> Printf.sprintf " Val(%d) [%s]\n" i (Pos.to_string pos)
+        | Add (pos, e1, e2) -> " Add [" ^ (Pos.to_string pos) ^ "]\n" ^ (pos_string_of_expression e1) ^ (pos_string_of_expression e2)
+        | Mul (pos, e1, e2) -> " Mul [" ^ (Pos.to_string pos) ^ "]\n" ^ (pos_string_of_expression e1) ^ (pos_string_of_expression e2)
+      in
+      all ^ sub
+        
     type _ n =
     | Start : expression n
     | Expr : expression n
@@ -183,21 +198,21 @@ module Grammar2 = struct
   *)
   open Tokenize
   let rule_start = rule Start (SA (NT Expr ^^^ ret,
-                                   fun e   ->  e))
+                                   fun e   pos -> e))
   let rule_expr = rule Expr (SA (NT AddExpr ^^^ T TEof ^^^ ret,
-                                 fun e          _      ->  e))
+                                 fun e          _      pos ->  e))
   let rule_add1 = rule AddExpr (SA (NT MulExpr ^^^ T TInfix2 ^^^ NT AddExpr ^^^ ret,
-                                    fun e1         _             e2         ->  Add (e1, e2)))
+                                    fun e1         _             e2         pos ->  Add (pos, e1, e2)))
   let rule_add2 = rule AddExpr (SA (NT MulExpr ^^^ ret,
-                                    fun e      ->  e))
+                                    fun e      pos ->  e))
   let rule_mul1 = rule MulExpr (SA (NT ValExpr ^^^ T TAsterisk ^^^ NT MulExpr ^^^ ret,
-                                    fun e1         _               e2         ->  Mul (e1, e2)))
+                                    fun e1         _               e2         pos ->  Mul (pos, e1, e2)))
   let rule_mul2 = rule MulExpr (SA (NT ValExpr ^^^ ret,
-                                    fun e      ->  e))
+                                    fun e      pos ->  e))
   let rule_val1 = rule ValExpr (SA (T TInt ^^^ ret,
-                                    fun i  ->  Val i))
+                                    fun i  pos ->  Val (pos, i)))
   let rule_val2 = rule ValExpr (SA (T TLParen ^^^ NT AddExpr ^^^ T TRParen ^^^ ret,
-                                    fun _         e              _         ->  e))
+                                    fun _         e              _         pos ->  e))
   type start = expression
 
   let k = 1
@@ -209,6 +224,18 @@ module Grammar2 = struct
 end
 
 module Parser2 = Parser2.MAKE(Grammar2)
-let exp = Parser2.parse lexemes
-let () = Printf.printf "Parsed = '%s'\n" (Grammar2.Symbols.string_of_expression exp)
+let exp =
+  try
+    Parser2.parse lexemes
+  with Parser2.Parse_error pos ->
+    Printf.printf "Parse error at %s\n" (Pos.to_string pos);
+    exit 1
+
+let () =
+  Printf.printf "Parsed = '%s'\n%s\n"
+    (Grammar2.Symbols.string_of_expression exp)
+    (Grammar2.Symbols.pos_string_of_expression exp);
+  List.iter (fun (_, c) -> print_char c) input;
+  print_newline ()
+
 
