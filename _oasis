@@ -2,7 +2,7 @@ OASISFormat:  0.4
 Name:         comp
 Version:      0.0.0
 #LicenseFile:  ?
-License:      GPL-3+ with OCaml linking exception
+License:      GPL-3+
 Authors:      Goswin von Brederlow <goswin-v-b@web.de>
 Copyrights:
               (C) 2014 Goswin von Brederlow
