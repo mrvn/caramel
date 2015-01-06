@@ -78,8 +78,8 @@ Test main
   Command: test/test.sh
   TestTools: test
 
-#SourceRepository master
-#  Type: git
-#  Location: https://github.com/Drup/LILiS.git
-#  Branch: master
-#  Browser: https://github.com/Drup/LILiS
+SourceRepository master
+  Type: git
+  Location: https://github.com/mrvn/caramel.git
+  Branch: master
+  Browser: https://github.com/mrvn/caramel
