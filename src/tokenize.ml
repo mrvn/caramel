@@ -1,3 +1,20 @@
+(* tokenizer
+ * Copyright (C) 2015 Goswin von Brederlow <goswin-v-b@web.de>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *)
+
 module Re = Regexp
 
 (* regexp helper *)
@@ -97,130 +114,11 @@ let skip_comment level stream =
 
 
 (* Lexer types *)
-module TA = struct
-  type ident = string
-
-  type upper_ident = string
-
-  type prefix = string
-
-  type infix = string
-
-  type _ token =
-  | TIdent : ident token
-  | TUpperIdent : upper_ident token
-  | TInt : int token
-  | TString : string token
-  | TChar : char token
-  | TPrefix : prefix token
-  | TInfix0 : infix token
-  | TInfix1 : infix token
-  | TInfix2 : infix token
-  | TInfix3 : infix token
-  | TInfix4 : infix token
-  | TLParen : unit token
-  | TRParen : unit token
-  | TIf : unit token
-  | TElse : unit token
-  | TLBrace : unit token
-  | TRBrace : unit token
-  | TAsterisk : unit token
-
-  | TEof : unit token
-
-  let keyword_associations =
-    [ ("if", TIf);
-      ("else", TElse);
-      
-      ("(", TLParen);
-      (")", TRParen);
-      ("*", TAsterisk);
-      ("{", TLBrace);
-      ("}", TRBrace);
-    ]
-
-  let string_of_token : type a . a token -> string = function
-    | TIdent -> "TIdent"
-    | TUpperIdent -> "TUpperIdent"
-    | TInt -> "TInt"
-    | TString -> "TString"
-    | TChar -> "TChar"
-    | TPrefix -> "TPrefix"
-    | TInfix0 -> "TInfix0"
-    | TInfix1 -> "TInfix1"
-    | TInfix2 -> "TInfix2"
-    | TInfix3 -> "TInfix3"
-    | TInfix4 -> "TInfix4"
-    | TLParen -> "("
-    | TRParen -> ")"
-    | TIf -> "if"
-    | TElse -> "else"
-    | TLBrace -> "{"
-    | TRBrace -> "}"
-    | TAsterisk -> "*"
-
-    | TEof -> "<eof>"
-
-  (* FIXME: use equal
-  (* for debuging, tracing *)
-  type box = Box : 'a token -> box
-  let string_of_token : type a . a token -> string = function t ->
-    let assoc_r b l =
-      let rec loop = function
-        | [] -> raise Not_found
-        | (a, maybe_b)::l_rest -> 
-          if Box b = Box maybe_b then a
-          else loop l_rest in
-      loop l in
-    try 
-      assoc_r t keyword_associations
-    with Not_found -> 
-      match t with
-        | TIdent -> "TIdent"
-        | TUpperIdent -> "TUpperIdent"
-        | TString -> "TString"
-        | TInt -> "TInt"
-        | TChar -> "TChar"
-        | TEof -> "TEof"
-        | _ -> "Operator"      
-  *)
-      
-  type _ attrib =
-  | ANil : unit attrib
-  | AInt : int -> int attrib
-  | AString : string -> string attrib
-  | AChar : char -> char attrib
-  | AIdent : ident -> ident attrib
-  | AUpperIdent : upper_ident -> upper_ident attrib
-  | APrefix : prefix -> prefix attrib
-  | AInfix : infix -> infix attrib
-
-  let string_of_attrib : type a . a attrib -> string = function
-    | ANil -> ""
-    | AInt i -> string_of_int i
-    | AString s -> s
-    | AChar c -> Regexp.string_of_char ['\\'] c
-    | AIdent s -> s
-    | AUpperIdent s -> s
-    | APrefix s -> s
-    | AInfix s -> s
-
-  let value_of_attrib : type a . a attrib -> a = function
-    | ANil -> ()
-    | AInt i -> i
-    | AString s -> s
-    | AChar c -> c
-    | AIdent s -> s
-    | AUpperIdent s -> s
-    | APrefix s -> s
-    | AInfix s -> s
-end
-
-module LT' = LexerTypes.MAKE(TA)
+module LT' = LexerTypes.MAKE(Token)
 module LT = struct
-  include TA
-  include (LT' : module type of LT' with type 'a token := 'a TA.token
-                                    and type 'a attrib := 'a TA.attrib)
+  include Token
+  include (LT' : module type of LT' with type 'a token := 'a Token.token
+                                    and type 'a attrib := 'a Token.attrib)
 end
 
 module StringLexer = struct

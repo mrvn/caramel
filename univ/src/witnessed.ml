@@ -39,7 +39,8 @@ module type Witnessed = sig
   val as_strings : t -> (string * string)
   val conv : ('a, 'b) conv -> t -> ('a * 'b)
   val has_key : 'a key -> t -> bool
-  val lookup : 'a key -> t list -> 'a value list
+  val find : 'a key -> t list -> 'a value option
+  val find_all : 'a key -> t list -> 'a value list
 end
 
 module MAKE(W : Witness) : Witnessed with type 'a key = 'a W.key
@@ -91,7 +92,17 @@ module MAKE(W : Witness) : Witnessed with type 'a key = 'a W.key
     | None -> false
     | Some _ -> true
 
-  let lookup : type a . a key -> t list -> a value list = fun key list ->
+  let find : type a . a key -> t list -> a value option = fun key list ->
+    let rec loop = function
+      | [] -> None
+      | x :: xs ->
+        match value_opt key x with
+        | None -> loop xs
+        | Some v as t -> t
+    in
+    loop list
+
+  let find_all : type a . a key -> t list -> a value list = fun key list ->
     let rec loop acc = function
       | [] -> acc
       | x :: xs ->

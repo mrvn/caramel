@@ -187,7 +187,7 @@ module MAKE(G : Grammar) = struct
     type t = Boxed.t list
     let empty = []
     let add t n terminals = (Boxed.box n terminals) :: t
-    let lookup n t = Boxed.lookup n t
+    let lookup n t = Boxed.find_all n t
   end
   
   let urules = List.map urule rules
